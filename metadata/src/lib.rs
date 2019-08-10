@@ -6,6 +6,15 @@ extern crate protobuf;
 extern crate librespot_core as core;
 extern crate librespot_protocol as protocol;
 
+#[macro_use]
+extern crate serde_derive;
+
+extern crate serde;
+extern crate serde_json;
+
+
+
+
 pub mod cover;
 
 use futures::Future;
@@ -16,6 +25,56 @@ use core::session::Session;
 use core::spotify_id::{FileId, SpotifyId};
 
 pub use protocol::metadata::AudioFile_Format as FileFormat;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JImage {
+    pub uri: String,
+}
+impl Default for JImage {
+    fn default() -> JImage {
+        JImage { uri: "".to_string() }
+   }
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JDisc {
+    pub name: String,
+    pub number: i32,
+    pub tracks: Vec<JTrack>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JTrack {
+    pub name: String,
+    pub uri: String,
+    pub playcount: i32,
+    pub popularity: i32,
+    pub number: i32,
+    pub duration: i32,
+    pub explicit: bool,
+    pub playable: bool,
+    pub artists: Vec<JArtist>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JArtist {
+    pub name: String,
+    pub uri: String,
+    #[serde(default)]
+    pub image: JImage,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JAlbum {
+    pub name: String,
+    pub uri: String,
+    pub year: i32,
+    pub cover: JImage,
+    pub copyrights: Vec<String>,
+    pub artists: Vec<JArtist>,
+    pub discs: Vec<JDisc>,
+}
 
 fn countrylist_contains(list: &str, country: &str) -> bool {
     list.chunks(2).any(|cc| cc == country)
@@ -72,6 +131,30 @@ pub trait Metadata: Send + Sized + 'static {
     }
 }
 
+
+pub trait JsonMeta: Send + Sized + 'static {
+
+    fn jrequest_url(id: SpotifyId) -> String;
+    fn jparse(msg: &JAlbum, session: &Session) -> Self;
+
+    fn jget(session: &Session, id: SpotifyId) -> Box<Future<Item = Self, Error = MercuryError>> {
+        let uri = Self::jrequest_url(id);
+        let request = session.mercury().get(uri);
+
+        let session = session.clone();
+        Box::new(request.and_then(move |response| {
+            let data = response.payload.first().expect("Empty payload");
+            println!("{:?}", data);
+            //let msg: Self::Message = protobuf::parse_from_bytes(data).unwrap();
+            let msg: JAlbum = serde_json::from_slice(data).expect("error while reading json");
+            println!("{:?}", msg);
+            Ok(Self::jparse(&msg, &session))
+        }))
+    }
+}
+
+
+
 #[derive(Debug, Clone)]
 pub struct Track {
     pub id: SpotifyId,
@@ -82,6 +165,15 @@ pub struct Track {
     pub files: LinearMap<FileFormat, FileId>,
     pub alternatives: Vec<SpotifyId>,
     pub available: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct JsAlbum {
+    pub id: SpotifyId,
+    pub name: String,
+    pub artists: Vec<SpotifyId>,
+    pub tracks: Vec<SpotifyId>,
+    pub cover: String,
 }
 
 #[derive(Debug, Clone)]
@@ -152,6 +244,50 @@ impl Metadata for Track {
         }
     }
 }
+
+impl JsonMeta for JsAlbum {
+
+    fn jrequest_url(id: SpotifyId) -> String {
+        format!("hm://album/v1/album-app/album/spotify:album:{}/desktop?catalogue=premium", id.to_base62())
+    }
+
+    fn jparse(album: &JAlbum, _: &Session) -> Self {
+        let artists = album.artists.iter()
+            .map(|artist| SpotifyId::from_base62(artist.uri.split(":").collect::<Vec<&str>>()[2]).unwrap())
+            .collect::<Vec<_>>();
+
+        //let tracks = album.discs[0].tracks.iter()
+        //    .map(|track| SpotifyId::from_base62(track.uri.split(":").collect::<Vec<&str>>()[2]).unwrap())
+        //    .collect::<Vec<_>>();
+        
+        let tracks = album.discs.iter()
+            .flat_map(|disc| disc.tracks.iter()
+            .map(|track| SpotifyId::from_base62(track.uri.split(":").collect::<Vec<&str>>()[2]).unwrap())
+            .collect::<Vec<_>>()).collect();
+
+        let cov = album.cover.uri.split("/").collect::<Vec<&str>>();
+        let covid= cov.last().unwrap();
+        println!("{:?}", covid);
+        let mut data = [0u8; 20];
+        for n in 0..20 {
+            let byte = u8::from_str_radix(&covid[2*n..2*n+2], 16).unwrap();
+            data[n] = byte;
+        }
+        //Ok(SpotifyId(u128::from_parts(high, low)))
+        println!("{:?}", data);
+        let fid = FileId(data);
+        println!("{}", fid);
+
+        JsAlbum {
+            id: SpotifyId::from_base62(album.uri.split(":").collect::<Vec<&str>>()[2]).unwrap(),
+            name: album.name.to_owned(),
+            artists: artists,
+            tracks: tracks,
+            cover: album.cover.uri.to_owned(),
+        }
+    }
+}
+
 
 impl Metadata for Album {
     type Message = protocol::metadata::Album;
