@@ -245,28 +245,25 @@ impl Metadata for Track {
     }
 }
 
-impl JsonMeta for JsAlbum {
+impl JsonMeta for Album {
 
     fn jrequest_url(id: SpotifyId) -> String {
         format!("hm://album/v1/album-app/album/spotify:album:{}/desktop?catalogue=premium", id.to_base62())
     }
 
     fn jparse(album: &JAlbum, _: &Session) -> Self {
-        let artists = album.artists.iter()
-            .map(|artist| SpotifyId::from_base62(artist.uri.split(":").collect::<Vec<&str>>()[2]).unwrap())
+        let artists = album.artists
+            .iter()
+            .map(|artist| SpotifyId::from_base62(artist.uri.split(":").last().unwrap()).unwrap())
             .collect::<Vec<_>>();
 
-        //let tracks = album.discs[0].tracks.iter()
-        //    .map(|track| SpotifyId::from_base62(track.uri.split(":").collect::<Vec<&str>>()[2]).unwrap())
-        //    .collect::<Vec<_>>();
-        
-        let tracks = album.discs.iter()
-            .flat_map(|disc| disc.tracks.iter()
-            .map(|track| SpotifyId::from_base62(track.uri.split(":").collect::<Vec<&str>>()[2]).unwrap())
-            .collect::<Vec<_>>()).collect();
+        let tracks = album.discs
+            .iter()
+            .flat_map(|disc| &disc.tracks)
+            .map(|track| SpotifyId::from_base62(track.uri.split(":").last().unwrap()).unwrap())
+            .collect::<Vec<_>>();
 
-        let cov = album.cover.uri.split("/").collect::<Vec<&str>>();
-        let covid= cov.last().unwrap();
+        let covid = album.cover.uri.split("/").last().unwrap();
         println!("{:?}", covid);
         let mut data = [0u8; 20];
         for n in 0..20 {
@@ -275,15 +272,15 @@ impl JsonMeta for JsAlbum {
         }
         //Ok(SpotifyId(u128::from_parts(high, low)))
         println!("{:?}", data);
-        let fid = FileId(data);
-        println!("{}", fid);
+        let cover = FileId(data);
+        println!("{}", cover);
 
-        JsAlbum {
-            id: SpotifyId::from_base62(album.uri.split(":").collect::<Vec<&str>>()[2]).unwrap(),
+        Album {
+            id: SpotifyId::from_base62(album.uri.split(":").last().unwrap()).unwrap(),
             name: album.name.to_owned(),
             artists: artists,
             tracks: tracks,
-            cover: album.cover.uri.to_owned(),
+            covers: vec![cover],
         }
     }
 }

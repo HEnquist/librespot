@@ -15,7 +15,7 @@ use librespot::core::authentication::Credentials;
 use librespot::core::config::SessionConfig;
 use librespot::core::session::Session;
 use librespot::core::spotify_id::SpotifyId;
-use librespot::metadata::{Metadata, Track, JsAlbum, JsonMeta};
+use librespot::metadata::{Metadata, Track, Album, JsonMeta};
 
 fn main() {
     env_logger::init();
@@ -42,7 +42,7 @@ fn main() {
         .run(Session::connect(session_config, credentials, None, handle))
         .unwrap();
 
-    let album = core.run(JsAlbum::jget(&session, album_uri)).unwrap();
+    let album = core.run(Album::jget(&session, album_uri)).unwrap();
     println!("{:?}",album);
     //for track_id in album.tracks {
     //    let album_track = core.run(Track::get(&session, track_id)).unwrap();
