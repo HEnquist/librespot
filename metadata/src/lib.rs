@@ -27,25 +27,25 @@ use core::spotify_id::{FileId, SpotifyId};
 pub use protocol::metadata::AudioFile_Format as FileFormat;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct JImage {
+pub struct JsonImage {
     pub uri: String,
 }
-impl Default for JImage {
-    fn default() -> JImage {
-        JImage { uri: "".to_string() }
+impl Default for JsonImage {
+    fn default() -> JsonImage {
+        JsonImage { uri: "".to_string() }
    }
 }
 
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct JDisc {
+pub struct JsonDisc {
     pub name: String,
     pub number: i32,
-    pub tracks: Vec<JTrack>,
+    pub tracks: Vec<JsonTrack>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct JTrack {
+pub struct JsonTrack {
     pub name: String,
     pub uri: String,
     pub playcount: i32,
@@ -54,26 +54,26 @@ pub struct JTrack {
     pub duration: i32,
     pub explicit: bool,
     pub playable: bool,
-    pub artists: Vec<JArtist>,
+    pub artists: Vec<JsonArtist>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct JArtist {
+pub struct JsonArtist {
     pub name: String,
     pub uri: String,
     #[serde(default)]
-    pub image: JImage,
+    pub image: JsonImage,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct JAlbum {
+pub struct JsonAlbum {
     pub name: String,
     pub uri: String,
     pub year: i32,
-    pub cover: JImage,
+    pub cover: JsonImage,
     pub copyrights: Vec<String>,
-    pub artists: Vec<JArtist>,
-    pub discs: Vec<JDisc>,
+    pub artists: Vec<JsonArtist>,
+    pub discs: Vec<JsonDisc>,
 }
 
 fn countrylist_contains(list: &str, country: &str) -> bool {
@@ -135,7 +135,7 @@ pub trait Metadata: Send + Sized + 'static {
 pub trait JsonMeta: Send + Sized + 'static {
 
     fn jrequest_url(id: SpotifyId) -> String;
-    fn jparse(msg: &JAlbum, session: &Session) -> Self;
+    fn jparse(msg: &JsonAlbum, session: &Session) -> Self;
 
     fn jget(session: &Session, id: SpotifyId) -> Box<Future<Item = Self, Error = MercuryError>> {
         let uri = Self::jrequest_url(id);
@@ -146,7 +146,7 @@ pub trait JsonMeta: Send + Sized + 'static {
             let data = response.payload.first().expect("Empty payload");
             println!("{:?}", data);
             //let msg: Self::Message = protobuf::parse_from_bytes(data).unwrap();
-            let msg: JAlbum = serde_json::from_slice(data).expect("error while reading json");
+            let msg: JsonAlbum = serde_json::from_slice(data).expect("error while reading json");
             println!("{:?}", msg);
             Ok(Self::jparse(&msg, &session))
         }))
@@ -165,15 +165,6 @@ pub struct Track {
     pub files: LinearMap<FileFormat, FileId>,
     pub alternatives: Vec<SpotifyId>,
     pub available: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct JsAlbum {
-    pub id: SpotifyId,
-    pub name: String,
-    pub artists: Vec<SpotifyId>,
-    pub tracks: Vec<SpotifyId>,
-    pub cover: String,
 }
 
 #[derive(Debug, Clone)]
@@ -251,7 +242,7 @@ impl JsonMeta for Album {
         format!("hm://album/v1/album-app/album/spotify:album:{}/desktop?catalogue=premium", id.to_base62())
     }
 
-    fn jparse(album: &JAlbum, _: &Session) -> Self {
+    fn jparse(album: &JsonAlbum, _: &Session) -> Self {
         let artists = album.artists
             .iter()
             .map(|artist| SpotifyId::from_base62(artist.uri.split(":").last().unwrap()).unwrap())
